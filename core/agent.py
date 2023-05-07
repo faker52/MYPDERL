@@ -136,7 +136,7 @@ class Agent:
                 batch = self.pop[i].buffer.sample(self.args.batch_size)
 
                 self.rl_agent.update_parameters_critic(batch, copy.deepcopy(self.pop[i].actor))
-        if self.updataRL % 10 ==0:
+        if self.updataRL % 5 == 0:
             batch = champion.buffer.sample(self.args.batch_size)
             self.rl_agent.update_parameters_net(batch, champion.actor)
         # return {'bcs_loss': 0, 'pgs_loss': pgs_loss}
@@ -164,7 +164,7 @@ class Agent:
         # Validation test for NeuroEvolution champion
         best_train_fitness = np.max(rewards)
         champion = self.pop[np.argmax(rewards)]
-
+        champion_replay = copy.deepcopy(champion)
         # print("Best TD Error:", np.max(errors))
 
         test_score = 0
@@ -185,8 +185,9 @@ class Agent:
         print(self.updataRL)
 
         self.train_ddpg(champion)
-        self.updataRL = (self.updataRL+1) % 10
-
+        self.updataRL = (self.updataRL+1) % 5
+        replace_index = np.argmin(all_fitness)
+        self.rl_to_evo(champion_replay, self.pop[replace_index])
         # Validation test for RL agent
         '''
          testr = 0
