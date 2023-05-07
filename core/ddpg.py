@@ -85,12 +85,12 @@ class Net(nn.Module):
 
         out = self.w_l3(torch.cat((input, obs), 1))
         if self.args.use_ln: out = self.lnorm3(out)
-        out = out.relu()
+        out = out.tanh()
 
         # Hidden Layer 4
         out = self.w_l4(out)
         if self.args.use_ln: out = self.lnorm4(out)
-        out = out.relu()
+        out = out.tanh()
 
         # Out
         out = (self.w_out(out)).tanh()
@@ -101,7 +101,7 @@ class Actor(nn.Module):
     def __init__(self, args, init=False):
         super(Actor, self).__init__()
         self.args = args
-        l1 = 64; l2 = args.state_dim
+        l1 = 32; l2 = args.state_dim
 
         # Construct Hidden Layer 1
         self.w_l1 = nn.Linear(args.state_dim, l1)
@@ -116,12 +116,12 @@ class Actor(nn.Module):
 
         # Hidden Layer 1
         out = self.w_l1(input)
-        #if self.args.use_ln: out = self.lnorm1(out)
-        out = out.relu()
+        if self.args.use_ln: out = self.lnorm1(out)
+        out = out.tanh()
 
         # Hidden Layer 2
         out = self.w_l2(out)
-        #if self.args.use_ln: out = self.lnorm2(out)
+        if self.args.use_ln: out = self.lnorm2(out)
         out = out.tanh()
 
 
@@ -233,7 +233,7 @@ class DDPG(object):
 
         self.net = Net(args, init=True)
         # self.actor_target = Actor(args, init=True)
-        self.net_optim = Adam(self.net.parameters(), lr=1e-6)
+        self.net_optim = Adam(self.net.parameters(), lr=0.5e-5)
 
         self.critic = Critic(args)
         self.critic_target = Critic(args)
@@ -257,7 +257,7 @@ class DDPG(object):
         dt = (current_q - target_q).abs()
         return dt.item()
 
-    def update_parameters(self, batch, actor, time):
+    def update_parameters_critic(self, batch, actor):
         state_batch, action_batch, next_state_batch, reward_batch, done_batch = batch
 
         # Load everything to GPU if not already
@@ -284,7 +284,7 @@ class DDPG(object):
         dt.backward()
         nn.utils.clip_grad_norm_(self.critic.parameters(), 10)
         self.critic_optim.step()
-
+        soft_update(self.critic_target, self.critic, self.tau)
 
         '''
          # Actor Update
@@ -299,19 +299,26 @@ class DDPG(object):
         soft_update(self.actor_target, self.actor, self.tau)
         
         '''
-       # net Update
-        if time % 3 ==0:
-            print("-------------net--updata------------")
-            self.net.zero_grad()
 
-            policy_grad_loss = -(self.critic.forward(state_batch, self.net(actor.forward(state_batch).detach(), state_batch))).mean()
-            policy_loss = policy_grad_loss
+    def update_parameters_net(self, batch, actor):
+        state_batch, action_batch, next_state_batch, reward_batch, done_batch = batch
+        # Load everything to GPU if not already
+        self.net.to(self.args.device)
+        self.critic_target.to(self.args.device)
+        self.critic.to(self.args.device)
 
-            policy_loss.backward()
-            nn.utils.clip_grad_norm_(self.net.parameters(), 10)
-            self.net_optim.step()
+        state_batch = state_batch.to(self.args.device)
+        print("-------------net--updata------------")
+        self.net.zero_grad()
 
-            soft_update(self.critic_target, self.critic, self.tau)
+        policy_grad_loss = -(self.critic.forward(state_batch, self.net(actor.forward(state_batch), state_batch))).mean()
+        policy_loss = policy_grad_loss
+
+        policy_loss.backward()
+        nn.utils.clip_grad_norm_(self.net.parameters(), 10)
+        self.net_optim.step()
+
+
 
 
         # return policy_grad_loss.data.cpu().numpy(), delta.data.cpu().numpy()

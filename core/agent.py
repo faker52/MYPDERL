@@ -135,9 +135,10 @@ class Agent:
             if len(self.pop[i].buffer) > self.args.batch_size:
                 batch = self.pop[i].buffer.sample(self.args.batch_size)
 
-                self.rl_agent.update_parameters(batch, copy.deepcopy(champion.actor), self.updataRL)
-
-
+                self.rl_agent.update_parameters_critic(batch, copy.deepcopy(self.pop[i].actor))
+        if self.updataRL % 10 ==0:
+            batch = champion.buffer.sample(self.args.batch_size)
+            self.rl_agent.update_parameters_net(batch, champion.actor)
         # return {'bcs_loss': 0, 'pgs_loss': pgs_loss}
 
     def train(self):
@@ -183,7 +184,7 @@ class Agent:
         # self.evaluate(self.rl_agent, is_action_noise=True)
         print(self.updataRL)
 
-        self.train_ddpg(copy.deepcopy(champion))
+        self.train_ddpg(champion)
         self.updataRL = (self.updataRL+1) % 10
 
         # Validation test for RL agent
